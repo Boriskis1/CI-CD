@@ -6,7 +6,6 @@ services:
       dockerfile: Dockerfile
     # Явный тег — не используем latest в production
     image: app-backend:1.0.0
-    container_name: app
     # Пробрасываем порт наружу 
     ports:
       - "8080:8080"
@@ -31,7 +30,6 @@ services:
   db:
     # Готовый образ PostgreSQL 
     image: postgres:16-alpine
-    container_name: app-db
     environment:
       POSTGRES_USER: ${DB_USER:-app}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-secret}
