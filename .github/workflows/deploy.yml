@@ -1,38 +1,39 @@
 name: Full Stack Application Deployment Test
 
+# Триггеры запуска
 on:
   push:
     branches: [ main ]
   workflow_dispatch:
 
-env:
-  COMPOSE_PROJECT_NAME: myapp
-
+# Запуск на нашем компьютере (Self-Hosted Runner)
 jobs:
   deploy-and-test:
     runs-on: self-hosted
-
+    
     steps:
     - name: Checkout code
+      # Скачиваем код репозитория на раннер
       uses: actions/checkout@v4
 
+      # Создаем файл .env из секретов GitHub 
     - name: Create .env file from secrets
       run: |
         echo "Creating .env file from GitHub Secrets..."
         $envContent = @(
-          "# Database configuration"
           "DB_HOST=${{ secrets.DB_HOST }}"
           "DB_PORT=${{ secrets.DB_PORT }}"
           "DB_NAME=${{ secrets.DB_NAME }}"
           "DB_USER=${{ secrets.DB_USER }}"
           "DB_PASSWORD=${{ secrets.DB_PASSWORD }}"
-          "# Application configuration"
           "APP_PORT=${{ secrets.APP_PORT }}"
         )
         Set-Content -Path .env -Value $envContent -Encoding ascii
         echo " .env file created successfully"
       shell: powershell
 
+      # Останавливаем старые контейнеры
+      # Собираем и запускаем стек в фоне 
     - name: Deploy with Docker Compose
       run: |
         echo " Starting application stack..."
@@ -44,6 +45,7 @@ jobs:
         docker compose ps
       shell: powershell
 
+      # Проверяем, что контейнеры  запустились
     - name: Verify containers are running
       run: |
         $status = docker compose ps
@@ -56,10 +58,10 @@ jobs:
         }
       shell: powershell
 
+      # Проверяем работу приложения и подключение к БД 
     - name: Run application tests
       run: |
         echo " Running application tests..."
-        echo "1. Testing application and database connectivity..."
         
         $health = curl.exe -s http://localhost:${{ secrets.APP_PORT }}/health
         if ($health -match "ok") {
@@ -78,7 +80,26 @@ jobs:
         }
       shell: powershell
 
-    - name: Save artifacts
+    - name: Create test report
+      run: |
+        $date = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        $report = @(
+          "# Deployment Test Report"
+          "- Date: $date"
+          "- Application: Healthy"
+          "- Database: Connected"
+          "- Containers: Running"
+          ""
+          "## Environment Variables"
+          "- DB_HOST: ${{ secrets.DB_HOST }}"
+          "- DB_NAME: ${{ secrets.DB_NAME }}"
+          "- APP_PORT: ${{ secrets.APP_PORT }}"
+        )
+        Set-Content -Path test-report.md -Value $report -Encoding ascii
+      shell: powershell
+
+      # Сохраняем конфигурационные файлы как артефакты
+    - name: Save artifacts 
       uses: actions/upload-artifact@v4
       with:
         name: deployment-artifacts
@@ -87,6 +108,7 @@ jobs:
           docker-compose.yml
         retention-days: 30
 
+      # Сохраняем логи контейнеров, даже если тесты упали 
     - name: Save Docker logs
       if: always()
       run: |
@@ -96,6 +118,7 @@ jobs:
         docker ps -a > docker-ps.txt
       shell: powershell
 
+      # Загружаем сохраненные логи как артефакт
     - name: Upload Docker logs as artifact
       uses: actions/upload-artifact@v4
       with:
@@ -105,3 +128,21 @@ jobs:
           docker-images.txt
           docker-ps.txt
         retention-days: 30
+
+    - name: Create test report
+      run: |
+        $date = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        $report = @(
+          "# Deployment Test Report"
+          "- Date: $date"
+          "- Application: Healthy"
+          "- Database: Connected"
+          "- Containers: Running"
+          ""
+          "## Environment Variables"
+          "- DB_HOST: ${{ secrets.DB_HOST }}"
+          "- DB_NAME: ${{ secrets.DB_NAME }}"
+          "- APP_PORT: ${{ secrets.APP_PORT }}"
+        )
+        Set-Content -Path test-report.md -Value $report -Encoding ascii
+      shell: powershell
