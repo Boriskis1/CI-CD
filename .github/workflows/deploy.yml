@@ -13,7 +13,7 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name Create .env file from secrets
+    - name: Create .env file from secrets
       run: |
         $envContent = @(
           "DB_USER=${{ secrets.DB_USER }}"
