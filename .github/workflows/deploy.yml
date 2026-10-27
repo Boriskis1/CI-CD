@@ -1,0 +1,80 @@
+name: Full Stack Application Deployment Test
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy-and-test:
+    runs-on: self-hosted
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Create .env file from secrets
+      run: |
+        echo "DB_USER=${{ secrets.DB_USER }}" > .env
+        echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> .env
+        echo "DB_NAME=${{ secrets.DB_NAME }}" >> .env
+        echo "APP_PORT=${{ secrets.APP_PORT }}" >> .env
+      shell: powershell
+
+    - name: Deploy with Docker Compose
+      run: |
+        docker compose down
+        docker compose up -d --build
+        Start-Sleep -Seconds 15
+      shell: powershell
+
+    - name: Verify containers are running
+      run: |
+        $status = docker compose ps
+        if ($status -match "Up") {
+          echo "All containers are running"
+        } else {
+          echo "Some containers failed to start"
+          docker compose logs
+          exit 1
+        }
+      shell: powershell
+
+    - name: Run application tests
+      run: |
+        $health = curl.exe -s http://localhost:${{ secrets.APP_PORT }}/health
+        if ($health -match "ok") {
+          echo "Web application is healthy"
+        } else {
+          echo "Health check failed"
+          exit 1
+        }
+
+        $response = curl.exe -s http://localhost:${{ secrets.APP_PORT }}/api/items
+        if ($response -match "first item") {
+          echo "API works and DB is connected"
+        } else {
+          echo "API or DB failed"
+          exit 1
+        }
+      shell: powershell
+
+    - name: Save artifacts (.env)
+      uses: actions/upload-artifact@v4
+      with:
+        name: deployment-artifacts
+        path: .env
+        retention-days: 30
+
+    - name: Save Docker logs
+      if: always()
+      run: |
+        docker compose logs > deployment-logs.txt
+      shell: powershell
+
+    - name: Upload Docker logs as artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: docker-logs
+        path: deployment-logs.txt
+        retention-days: 30
