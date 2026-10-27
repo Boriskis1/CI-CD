@@ -12,11 +12,11 @@ jobs:
     runs-on: self-hosted
     
     steps:
+    # Скачиваем код репозитория на раннер
     - name: Checkout code
-      # Скачиваем код репозитория на раннер
       uses: actions/checkout@v4
 
-      # Создаем файл .env из секретов GitHub 
+    # Создаем файл .env из секретов GitHub 
     - name: Create .env file from secrets
       run: |
         echo "Creating .env file from GitHub Secrets..."
@@ -32,8 +32,8 @@ jobs:
         echo " .env file created successfully"
       shell: powershell
 
-      # Останавливаем старые контейнеры
-      # Собираем и запускаем стек в фоне 
+    # Останавливаем старые контейнеры
+    # Собираем и запускаем стек в фоне 
     - name: Deploy with Docker Compose
       run: |
         echo " Starting application stack..."
@@ -45,7 +45,7 @@ jobs:
         docker compose ps
       shell: powershell
 
-      # Проверяем, что контейнеры  запустились
+    # Проверяем, что контейнеры запустились
     - name: Verify containers are running
       run: |
         $status = docker compose ps
@@ -58,7 +58,7 @@ jobs:
         }
       shell: powershell
 
-      # Проверяем работу приложения и подключение к БД 
+    # Проверяем работу приложения и подключение к БД 
     - name: Run application tests
       run: |
         echo " Running application tests..."
@@ -80,35 +80,24 @@ jobs:
         }
       shell: powershell
 
-    - name: Create test report
+    # Сохраняем конфигурационные файлы как артефакты
+    # Копируем .env в env_config.txt, чтобы Windows его видел в архиве
+    - name: Save artifacts 
       run: |
-        $date = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-        $report = @(
-          "# Deployment Test Report"
-          "- Date: $date"
-          "- Application: Healthy"
-          "- Database: Connected"
-          "- Containers: Running"
-          ""
-          "## Environment Variables"
-          "- DB_HOST: ${{ secrets.DB_HOST }}"
-          "- DB_NAME: ${{ secrets.DB_NAME }}"
-          "- APP_PORT: ${{ secrets.APP_PORT }}"
-        )
-        Set-Content -Path test-report.md -Value $report -Encoding ascii
+        Copy-Item -Path .env -Destination env_config.txt
       shell: powershell
 
-      # Сохраняем конфигурационные файлы как артефакты
-    - name: Save artifacts 
+    # Загружаем конфигурационные файлы в артефакты
+    - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
         name: deployment-artifacts
         path: |
-          .env
+          env_config.txt
           docker-compose.yml
         retention-days: 30
 
-      # Сохраняем логи контейнеров, даже если тесты упали 
+    # Сохраняем логи контейнеров, даже если тесты упали 
     - name: Save Docker logs
       if: always()
       run: |
@@ -118,7 +107,7 @@ jobs:
         docker ps -a > docker-ps.txt
       shell: powershell
 
-      # Загружаем сохраненные логи как артефакт
+    # Загружаем сохраненные логи как артефакт
     - name: Upload Docker logs as artifact
       uses: actions/upload-artifact@v4
       with:
@@ -128,21 +117,3 @@ jobs:
           docker-images.txt
           docker-ps.txt
         retention-days: 30
-
-    - name: Create test report
-      run: |
-        $date = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-        $report = @(
-          "# Deployment Test Report"
-          "- Date: $date"
-          "- Application: Healthy"
-          "- Database: Connected"
-          "- Containers: Running"
-          ""
-          "## Environment Variables"
-          "- DB_HOST: ${{ secrets.DB_HOST }}"
-          "- DB_NAME: ${{ secrets.DB_NAME }}"
-          "- APP_PORT: ${{ secrets.APP_PORT }}"
-        )
-        Set-Content -Path test-report.md -Value $report -Encoding ascii
-      shell: powershell
