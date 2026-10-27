@@ -5,6 +5,9 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+env:
+  COMPOSE_PROJECT_NAME: myapp
+
 jobs:
   deploy-and-test:
     runs-on: self-hosted
@@ -15,29 +18,39 @@ jobs:
 
     - name: Create .env file from secrets
       run: |
+        echo "Creating .env file from GitHub Secrets..."
         $envContent = @(
+          "# Database configuration"
+          "DB_HOST=${{ secrets.DB_HOST }}"
+          "DB_PORT=${{ secrets.DB_PORT }}"
+          "DB_NAME=${{ secrets.DB_NAME }}"
           "DB_USER=${{ secrets.DB_USER }}"
           "DB_PASSWORD=${{ secrets.DB_PASSWORD }}"
-          "DB_NAME=${{ secrets.DB_NAME }}"
+          "# Application configuration"
           "APP_PORT=${{ secrets.APP_PORT }}"
         )
         Set-Content -Path .env -Value $envContent -Encoding ascii
+        echo " .env file created successfully"
       shell: powershell
 
     - name: Deploy with Docker Compose
       run: |
+        echo " Starting application stack..."
         docker compose down
         docker compose up -d --build
+        echo " Waiting for services to start..."
         Start-Sleep -Seconds 15
+        echo " Checking container status..."
+        docker compose ps
       shell: powershell
 
     - name: Verify containers are running
       run: |
         $status = docker compose ps
         if ($status -match "Up") {
-          echo "All containers are running"
+          echo " All containers are running"
         } else {
-          echo "Some containers failed to start"
+          echo " Some containers failed to start"
           docker compose logs
           exit 1
         }
@@ -45,39 +58,50 @@ jobs:
 
     - name: Run application tests
       run: |
+        echo " Running application tests..."
+        echo "1. Testing application and database connectivity..."
+        
         $health = curl.exe -s http://localhost:${{ secrets.APP_PORT }}/health
         if ($health -match "ok") {
-          echo "Web application is healthy"
+          echo " Web application is healthy"
         } else {
-          echo "Health check failed"
+          echo " Web application health check failed"
           exit 1
         }
 
         $response = curl.exe -s http://localhost:${{ secrets.APP_PORT }}/api/items
         if ($response -match "first item") {
-          echo "API works and DB is connected"
+          echo " Application database connection working"
         } else {
-          echo "API or DB failed"
+          echo " Application database connection failed"
           exit 1
         }
       shell: powershell
 
-    - name: Save artifacts (.env)
+    - name: Save artifacts
       uses: actions/upload-artifact@v4
       with:
         name: deployment-artifacts
-        path: .env
+        path: |
+          .env
+          docker-compose.yml
         retention-days: 30
 
     - name: Save Docker logs
       if: always()
       run: |
+        echo " Saving Docker logs..."
         docker compose logs | Out-File -FilePath deployment-logs.txt -Encoding ascii
+        docker images > docker-images.txt
+        docker ps -a > docker-ps.txt
       shell: powershell
 
     - name: Upload Docker logs as artifact
       uses: actions/upload-artifact@v4
       with:
         name: docker-logs
-        path: deployment-logs.txt
+        path: |
+          deployment-logs.txt
+          docker-images.txt
+          docker-ps.txt
         retention-days: 30
