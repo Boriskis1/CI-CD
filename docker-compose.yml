@@ -1,0 +1,60 @@
+services:
+  app:
+    # Собираем образ из папки backend по Dockerfile
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    # Явный тег — не используем latest в production
+    image: app-backend:1.0.0
+    container_name: app
+    # Пробрасываем порт наружу 
+    ports:
+      - "8080:8080"
+    environment:
+      STATIC_DIR: /app/static
+      # DB_HOST=db — имя сервиса БД в Compose-сети
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USER: ${DB_USER:-app}
+      DB_PASSWORD: ${DB_PASSWORD:-secret}
+      DB_NAME: ${DB_NAME:-appdb}
+    volumes:
+      - ./frontend:/app/static:ro
+    depends_on:
+      db:
+        # Ожидание, пока healthcheck БД не станет healthy
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - app_net
+
+  db:
+    # Готовый образ PostgreSQL 
+    image: postgres:16-alpine
+    container_name: app-db
+    environment:
+      POSTGRES_USER: ${DB_USER:-app}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-secret}
+      POSTGRES_DB: ${DB_NAME:-appdb}
+    # healthcheck: pg_isready проверяет, что БД принимает соединения
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-app} -d ${DB_NAME:-appdb}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    volumes:
+      # Именованный том 
+      - db_data:/var/lib/postgresql/data
+      # SQL-скрипты, выполняемые при первом старте Postgres
+      - ./init:/docker-entrypoint-initdb.d:ro
+    restart: unless-stopped
+    networks:
+      - app_net
+
+volumes:
+  db_data:
+
+networks:
+  app_net:
+    driver: bridge
